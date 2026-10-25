@@ -1,0 +1,610 @@
+```javascript
+const photoInput = document.getElementById("photoInput");
+const photoPreview = document.getElementById("photoPreview");
+const cropArea = document.getElementById("cropArea");
+const zoomSlider = document.getElementById("zoom");
+
+const uploadSection = document.getElementById("uploadSection");
+const editorSection = document.getElementById("editorSection");
+const resultSection = document.getElementById("resultSection");
+
+const changePhoto = document.getElementById("changePhoto");
+const startOver = document.getElementById("startOver");
+const generateButton = document.getElementById("generateButton");
+
+const countrySelect = document.getElementById("country");
+const copiesSelect = document.getElementById("copies");
+
+const singleCanvas = document.getElementById("singleCanvas");
+const sheetCanvas = document.getElementById("sheetCanvas");
+
+const downloadSingle = document.getElementById("downloadSingle");
+const downloadSheet = document.getElementById("downloadSheet");
+const printSheet = document.getElementById("printSheet");
+
+const resultInfo = document.getElementById("resultInfo");
+
+
+let image = new Image();
+
+let imageX = 0;
+let imageY = 0;
+let zoom = 1;
+
+let dragging = false;
+let startMouseX = 0;
+let startMouseY = 0;
+let startImageX = 0;
+let startImageY = 0;
+
+
+// Passport dimensions in millimeters
+const photoSizes = {
+
+    usa: {
+        name: "United States",
+        width: 51,
+        height: 51
+    },
+
+    canada: {
+        name: "Canada",
+        width: 50,
+        height: 70
+    },
+
+    uk: {
+        name: "United Kingdom",
+        width: 35,
+        height: 45
+    },
+
+    eu: {
+        name: "EU / Schengen",
+        width: 35,
+        height: 45
+    }
+
+};
+
+
+// Upload photo
+photoInput.addEventListener("change", function () {
+
+    const file = photoInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+        alert("Please choose an image file.");
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function (event) {
+
+        image = new Image();
+
+        image.onload = function () {
+
+            imageX = 0;
+            imageY = 0;
+            zoom = 1;
+
+            zoomSlider.value = 1;
+
+            updatePhoto();
+
+            uploadSection.classList.add("hidden");
+            resultSection.classList.add("hidden");
+            editorSection.classList.remove("hidden");
+
+        };
+
+        image.src = event.target.result;
+
+    };
+
+    reader.readAsDataURL(file);
+
+});
+
+
+// Change photo
+changePhoto.addEventListener("click", function () {
+    photoInput.click();
+});
+
+
+// Zoom
+zoomSlider.addEventListener("input", function () {
+
+    zoom = Number(zoomSlider.value);
+
+    updatePhoto();
+
+});
+
+
+// Update editor image
+function updatePhoto() {
+
+    if (!image.src) {
+        return;
+    }
+
+    const areaWidth = cropArea.clientWidth;
+    const areaHeight = cropArea.clientHeight;
+
+    const imageRatio = image.width / image.height;
+
+    let width;
+    let height;
+
+    if (imageRatio > 1) {
+
+        height = areaHeight;
+        width = height * imageRatio;
+
+    } else {
+
+        width = areaWidth;
+        height = width / imageRatio;
+
+    }
+
+    width *= zoom;
+    height *= zoom;
+
+    photoPreview.style.width = width + "px";
+    photoPreview.style.height = height + "px";
+
+    photoPreview.style.left =
+        (areaWidth / 2 + imageX) + "px";
+
+    photoPreview.style.top =
+        (areaHeight / 2 + imageY) + "px";
+
+    photoPreview.style.transform =
+        "translate(-50%, -50%)";
+
+}
+
+
+// Mouse dragging
+cropArea.addEventListener("mousedown", function (event) {
+
+    dragging = true;
+
+    startMouseX = event.clientX;
+    startMouseY = event.clientY;
+
+    startImageX = imageX;
+    startImageY = imageY;
+
+});
+
+
+window.addEventListener("mousemove", function (event) {
+
+    if (!dragging) {
+        return;
+    }
+
+    imageX =
+        startImageX +
+        (event.clientX - startMouseX);
+
+    imageY =
+        startImageY +
+        (event.clientY - startMouseY);
+
+    updatePhoto();
+
+});
+
+
+window.addEventListener("mouseup", function () {
+    dragging = false;
+});
+
+
+// Touch dragging
+cropArea.addEventListener("touchstart", function (event) {
+
+    const touch = event.touches[0];
+
+    dragging = true;
+
+    startMouseX = touch.clientX;
+    startMouseY = touch.clientY;
+
+    startImageX = imageX;
+    startImageY = imageY;
+
+}, { passive: true });
+
+
+cropArea.addEventListener("touchmove", function (event) {
+
+    if (!dragging) {
+        return;
+    }
+
+    const touch = event.touches[0];
+
+    imageX =
+        startImageX +
+        (touch.clientX - startMouseX);
+
+    imageY =
+        startImageY +
+        (touch.clientY - startMouseY);
+
+    updatePhoto();
+
+}, { passive: true });
+
+
+cropArea.addEventListener("touchend", function () {
+    dragging = false;
+});
+
+
+// Create passport photo
+generateButton.addEventListener("click", function () {
+
+    createSinglePhoto();
+    createSheet();
+
+    const size = photoSizes[countrySelect.value];
+
+    resultInfo.textContent =
+        `${size.name} — ${size.width} × ${size.height} mm`;
+
+    editorSection.classList.add("hidden");
+    resultSection.classList.remove("hidden");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+
+});
+
+
+// Draw the selected crop onto a canvas
+function drawPassportPhoto(canvas, widthPixels, heightPixels) {
+
+    canvas.width = widthPixels;
+    canvas.height = heightPixels;
+
+    const context = canvas.getContext("2d");
+
+    context.fillStyle = "white";
+    context.fillRect(
+        0,
+        0,
+        widthPixels,
+        heightPixels
+    );
+
+
+    const cropWidth =
+        cropArea.clientWidth;
+
+    const cropHeight =
+        cropArea.clientHeight;
+
+
+    const displayedWidth =
+        parseFloat(photoPreview.style.width);
+
+    const displayedHeight =
+        parseFloat(photoPreview.style.height);
+
+
+    const displayedLeft =
+        cropWidth / 2 + imageX - displayedWidth / 2;
+
+    const displayedTop =
+        cropHeight / 2 + imageY - displayedHeight / 2;
+
+
+    const scaleX =
+        image.width / displayedWidth;
+
+    const scaleY =
+        image.height / displayedHeight;
+
+
+    const sourceX =
+        Math.max(
+            0,
+            -displayedLeft * scaleX
+        );
+
+    const sourceY =
+        Math.max(
+            0,
+            -displayedTop * scaleY
+        );
+
+
+    const sourceWidth =
+        cropWidth * scaleX;
+
+    const sourceHeight =
+        cropHeight * scaleY;
+
+
+    context.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        widthPixels,
+        heightPixels
+    );
+
+}
+
+
+// Create single passport photo
+function createSinglePhoto() {
+
+    const size = photoSizes[countrySelect.value];
+
+    const pixelsPerMM = 12;
+
+    const width =
+        Math.round(size.width * pixelsPerMM);
+
+    const height =
+        Math.round(size.height * pixelsPerMM);
+
+    drawPassportPhoto(
+        singleCanvas,
+        width,
+        height
+    );
+
+}
+
+
+// Create printable sheet
+function createSheet() {
+
+    const size = photoSizes[countrySelect.value];
+
+    const copies =
+        Number(copiesSelect.value);
+
+
+    // Approximate printable 4 × 6 inch sheet
+    const sheetWidth = 1200;
+    const sheetHeight = 1800;
+
+
+    sheetCanvas.width = sheetWidth;
+    sheetCanvas.height = sheetHeight;
+
+
+    const context =
+        sheetCanvas.getContext("2d");
+
+
+    context.fillStyle = "white";
+
+    context.fillRect(
+        0,
+        0,
+        sheetWidth,
+        sheetHeight
+    );
+
+
+    const photoRatio =
+        size.width / size.height;
+
+
+    let photoWidth = 420;
+
+    let photoHeight =
+        photoWidth / photoRatio;
+
+
+    // Leave room between photos
+    const gap = 35;
+
+
+    const columns = 2;
+
+    const rows =
+        Math.ceil(copies / columns);
+
+
+    const totalWidth =
+        columns * photoWidth +
+        (columns - 1) * gap;
+
+
+    const totalHeight =
+        rows * photoHeight +
+        (rows - 1) * gap;
+
+
+    const startX =
+        (sheetWidth - totalWidth) / 2;
+
+
+    const startY =
+        (sheetHeight - totalHeight) / 2;
+
+
+    for (let i = 0; i < copies; i++) {
+
+        const column =
+            i % columns;
+
+        const row =
+            Math.floor(i / columns);
+
+
+        const x =
+            startX +
+            column * (photoWidth + gap);
+
+
+        const y =
+            startY +
+            row * (photoHeight + gap);
+
+
+        context.drawImage(
+            singleCanvas,
+            x,
+            y,
+            photoWidth,
+            photoHeight
+        );
+
+    }
+
+}
+
+
+// Download single photo
+downloadSingle.addEventListener("click", function () {
+
+    singleCanvas.toBlob(function (blob) {
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const link =
+            document.createElement("a");
+
+        link.href = url;
+
+        link.download =
+            "passport-photo.jpg";
+
+        link.click();
+
+        URL.revokeObjectURL(url);
+
+    }, "image/jpeg", 0.95);
+
+});
+
+
+// Download printable sheet
+downloadSheet.addEventListener("click", function () {
+
+    sheetCanvas.toBlob(function (blob) {
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const link =
+            document.createElement("a");
+
+        link.href = url;
+
+        link.download =
+            "passport-photo-sheet.jpg";
+
+        link.click();
+
+        URL.revokeObjectURL(url);
+
+    }, "image/jpeg", 0.95);
+
+});
+
+
+// Print sheet
+printSheet.addEventListener("click", function () {
+
+    const imageData =
+        sheetCanvas.toDataURL("image/png");
+
+
+    const printWindow =
+        window.open("", "_blank");
+
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+
+        <html>
+
+        <head>
+
+            <title>Passport Photo Sheet</title>
+
+            <style>
+
+                @page {
+                    size: 4in 6in;
+                    margin: 0;
+                }
+
+                html,
+                body {
+                    margin: 0;
+                    padding: 0;
+                    width: 4in;
+                    height: 6in;
+                }
+
+                img {
+                    width: 4in;
+                    height: 6in;
+                    display: block;
+                }
+
+            </style>
+
+        </head>
+
+        <body>
+
+            <img src="${imageData}">
+
+        </body>
+
+        </html>
+    `);
+
+
+    printWindow.document.close();
+
+    printWindow.focus();
+
+    setTimeout(function () {
+
+        printWindow.print();
+
+    }, 500);
+
+});
+
+
+// Start over
+startOver.addEventListener("click", function () {
+
+    resultSection.classList.add("hidden");
+    editorSection.classList.add("hidden");
+    uploadSection.classList.remove("hidden");
+
+    photoInput.value = "";
+
+    image = new Image();
