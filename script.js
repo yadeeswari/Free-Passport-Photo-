@@ -104,7 +104,49 @@ photoInput.addEventListener("change", function () {
 
         };
 
-        image.src = event.target.result;
+        photoInput.addEventListener("change", function () {
+
+    const file = photoInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+        alert("Please choose an image file.");
+        return;
+    }
+
+    const imageURL = URL.createObjectURL(file);
+
+    image = new Image();
+
+    image.onload = function () {
+
+        imageX = 0;
+        imageY = 0;
+        zoom = 1;
+
+        zoomSlider.value = 1;
+
+        // Actually show the uploaded photo
+        photoPreview.src = imageURL;
+
+        updatePhoto();
+
+        uploadSection.classList.add("hidden");
+        resultSection.classList.add("hidden");
+        editorSection.classList.remove("hidden");
+
+    };
+
+    image.onerror = function () {
+        alert("Sorry, we couldn't load that photo.");
+    };
+
+    image.src = imageURL;
+
+});
 
     };
 
